@@ -1,0 +1,30 @@
+# Local development database only. Production runs its own Postgres.
+#
+# Port 5433, not 5432: the VerseMate stack on this machine already claims 5432,
+# and having both up at once should not be a choice you have to make.
+name: amicus
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: amicus-postgres
+    environment:
+      POSTGRES_DB: amicus
+      POSTGRES_USER: amicus
+      POSTGRES_PASSWORD: amicus_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      # NOT /var/lib/postgresql/data — Postgres 18+ images store data in a
+      # major-version subdirectory and refuse to start if the volume is mounted
+      # at the old path. Mounting the parent is what makes pg_upgrade --link work.
+      - amicus-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amicus -d amicus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  amicus-pgdata:

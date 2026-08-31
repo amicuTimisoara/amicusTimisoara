@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.11" />
+    <!-- Pinned: Microsoft.AspNetCore.OpenApi 10.0.11 drags in Microsoft.OpenApi
+         2.0.0, which carries GHSA-v5pm-xwqc-g5wc (high — circular schema refs
+         abort parsing). 2.7.5 is the first patched release on the 2.x line.
+         Do NOT jump to 3.x: it makes IOpenApiMediaType.Example read-only and
+         the ASP.NET Core 10 XML-comment source generator fails to compile. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Amicus.Domain\Amicus.Domain.csproj" />
+    <ProjectReference Include="..\Amicus.Infrastructure\Amicus.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
