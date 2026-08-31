@@ -18,6 +18,28 @@ jobs:
     name: build & test
     runs-on: ubuntu-latest
 
+    # The integration tests run against a real Postgres on purpose: the rule that
+    # one slot holds one live booking is a partial unique index, and no in-memory
+    # provider enforces it. Testing without Postgres would pass while production
+    # double-booked.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: amicus
+          POSTGRES_PASSWORD: amicus_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U amicus -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      AMICUS_TEST_POSTGRES: Host=localhost;Port=5432;Database=postgres;Username=amicus;Password=amicus_dev
+
     steps:
       - uses: actions/checkout@v7
 

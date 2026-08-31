@@ -1,8 +1,9 @@
+using Amicus.Api.Auth;
+using Amicus.Api.Endpoints;
 using Amicus.Api.Setup;
 using Amicus.Infrastructure;
 using Amicus.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +11,15 @@ builder.Services.AddAmicusPersistence(builder.Configuration);
 builder.Services.AddAmicusIdentity();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks().AddDbContextCheck<AmicusDbContext>();
+
+// Injected rather than calling DateTimeOffset.UtcNow inline, so tests can book a
+// slot in a controlled "now" instead of depending on the wall clock.
+builder.Services.AddSingleton(TimeProvider.System);
+
+builder.Services
+    .AddOptions<GoogleAuthOptions>()
+    .Bind(builder.Configuration.GetSection(GoogleAuthOptions.SectionName));
+builder.Services.AddScoped<IGoogleIdTokenVerifier, GoogleIdTokenVerifier>();
 
 var app = builder.Build();
 
@@ -22,27 +32,21 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // /register, /login, /refresh, /manage/info — email + password, bearer tokens.
-// Google sign-in is the next increment; see README.
-app.MapGroup("/auth").MapIdentityApi<AppUser>();
+var auth = app.MapGroup("/auth");
+auth.MapIdentityApi<AppUser>();
+auth.MapGoogleAuth();
+
+app.MapEvents();
+app.MapBookings();
+app.MapAdmin();
 
 // Liveness AND readiness: it round-trips the database, so a green /health means
 // the API can actually serve, not merely that the process is up.
 app.MapHealthChecks("/health");
 
-await EnsureRolesExistAsync(app.Services);
+await StartupTasks.RunAsync(app.Services, app.Configuration, app.Logger);
 
 app.Run();
 
-static async Task EnsureRolesExistAsync(IServiceProvider services)
-{
-    await using var scope = services.CreateAsyncScope();
-    var roles = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
-
-    foreach (var role in AppRoles.All)
-    {
-        if (!await roles.RoleExistsAsync(role))
-        {
-            await roles.CreateAsync(new AppRole { Name = role });
-        }
-    }
-}
+/// <summary>Marker so the integration tests can host this app in-process.</summary>
+public partial class Program;
