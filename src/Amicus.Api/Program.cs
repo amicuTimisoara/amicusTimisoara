@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddAmicusPersistence(builder.Configuration);
+builder.Services.AddAmicusDataProtection(builder.Configuration);
 builder.Services.AddAmicusIdentity();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks().AddDbContextCheck<AmicusDbContext>();
@@ -15,6 +16,9 @@ builder.Services.AddHealthChecks().AddDbContextCheck<AmicusDbContext>();
 // Injected rather than calling DateTimeOffset.UtcNow inline, so tests can book a
 // slot in a controlled "now" instead of depending on the wall clock.
 builder.Services.AddSingleton(TimeProvider.System);
+
+builder.Services.AddReverseProxySupport();
+builder.Services.AddAmicusRateLimiting(builder.Configuration);
 
 builder.Services
     .AddOptions<GoogleAuthOptions>()
@@ -28,11 +32,18 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// Before the rate limiter, so per-IP partitions see the real client address
+// rather than nginx's loopback — otherwise every request shares one bucket.
+app.UseForwardedHeaders();
+app.UseForwardedPrefix();
+
+app.UseRateLimiter();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 // /register, /login, /refresh, /manage/info — email + password, bearer tokens.
-var auth = app.MapGroup("/auth");
+var auth = app.MapGroup("/auth").RequireRateLimiting(RateLimitSetup.AuthPolicy);
 auth.MapIdentityApi<AppUser>();
 auth.MapGoogleAuth();
 
@@ -40,10 +51,12 @@ app.MapEvents();
 app.MapBookings();
 app.MapAdmin();
 
+// Deliberately exempt: an uptime monitor polling every few seconds must not be
+// throttled, and it exposes nothing.
+app.MapHealthChecks("/health").DisableRateLimiting();
+
 // Liveness AND readiness: it round-trips the database, so a green /health means
 // the API can actually serve, not merely that the process is up.
-app.MapHealthChecks("/health");
-
 await StartupTasks.RunAsync(app.Services, app.Configuration, app.Logger);
 
 app.Run();

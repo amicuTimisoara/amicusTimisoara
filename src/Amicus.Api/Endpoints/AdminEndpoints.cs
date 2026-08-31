@@ -17,7 +17,7 @@ public static class AdminEndpoints
 
         group.MapPost("/events", async (
             [FromBody] CreateEventRequest request, AmicusDbContext db,
-            TimeProvider clock, CancellationToken ct) =>
+            TimeProvider clock, HttpContext http, CancellationToken ct) =>
         {
             if (request.EndsOn < request.StartsOn)
             {
@@ -50,7 +50,7 @@ public static class AdminEndpoints
             db.Events.Add(@event);
             await db.SaveChangesAsync(ct);
 
-            return Results.Created($"/events/{@event.Slug}", new EventSummary(
+            return CreatedAt.Path(http, $"/events/{@event.Slug}", new EventSummary(
                 @event.Id, @event.Slug, @event.Name,
                 @event.StartsOn, @event.EndsOn, @event.TimeZoneId));
         })
@@ -75,7 +75,7 @@ public static class AdminEndpoints
 
         group.MapPost("/specialists", async (
             [FromBody] CreateSpecialistRequest request, AmicusDbContext db,
-            TimeProvider clock, CancellationToken ct) =>
+            TimeProvider clock, HttpContext http, CancellationToken ct) =>
         {
             var specialist = new Specialist
             {
@@ -90,13 +90,13 @@ public static class AdminEndpoints
             db.Specialists.Add(specialist);
             await db.SaveChangesAsync(ct);
 
-            return Results.Created($"/admin/specialists/{specialist.Id}", specialist.Id);
+            return CreatedAt.Path(http, $"/admin/specialists/{specialist.Id}", specialist.Id);
         })
             .WithSummary("Add a specialist. No account is created — they do not need one.");
 
         group.MapPost("/events/{eventId:guid}/specialists", async (
             Guid eventId, [FromBody] AssignSpecialistRequest request,
-            AmicusDbContext db, CancellationToken ct) =>
+            AmicusDbContext db, HttpContext http, CancellationToken ct) =>
         {
             var exists = await db.Events.AnyAsync(e => e.Id == eventId, ct)
                 && await db.Specialists.AnyAsync(s => s.Id == request.SpecialistId, ct);
@@ -126,14 +126,14 @@ public static class AdminEndpoints
             db.EventSpecialists.Add(assignment);
             await db.SaveChangesAsync(ct);
 
-            return Results.Created(
-                $"/admin/event-specialists/{assignment.Id}", assignment.Id);
+            return CreatedAt.Path(
+                http, $"/admin/event-specialists/{assignment.Id}", assignment.Id);
         })
             .WithSummary("Put a specialist on an event's roster.");
 
         group.MapPost("/event-specialists/{eventSpecialistId:guid}/patterns", async (
             Guid eventSpecialistId, [FromBody] CreateSlotPatternRequest request,
-            AmicusDbContext db, CancellationToken ct) =>
+            AmicusDbContext db, HttpContext http, CancellationToken ct) =>
         {
             var assignment = await db.EventSpecialists
                 .Include(es => es.Event)
@@ -170,7 +170,7 @@ public static class AdminEndpoints
             db.SlotPatterns.Add(pattern);
             await db.SaveChangesAsync(ct);
 
-            return Results.Created($"/admin/patterns/{pattern.Id}", pattern.Id);
+            return CreatedAt.Path(http, $"/admin/patterns/{pattern.Id}", pattern.Id);
         })
             .WithSummary("Assign a recurring availability rule to a specialist.");
 

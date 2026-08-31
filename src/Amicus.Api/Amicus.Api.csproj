@@ -1,6 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <!-- Measured on a Raspberry Pi 5 (4 cores), 384-slot board, 32 concurrent
+         clients for 30s: Server GC 263 rps / 252 MB peak, Workstation GC
+         255 rps / 205 MB peak. Same throughput for ~47 MB less, because Server
+         GC allocates one heap per core. Flip this back to true on a machine
+         where RAM is not the binding constraint. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Amicus.Infrastructure;
 using Amicus.Infrastructure.Identity;
 
@@ -11,6 +12,33 @@ namespace Amicus.Api.Setup;
 /// </summary>
 public static class IdentitySetup
 {
+    /// <summary>
+    /// Persists Data Protection keys to disk when a path is configured.
+    ///
+    /// Identity's bearer tokens are protected with Data Protection, whose keys live
+    /// in memory unless told otherwise. On a service that restarts — a deploy, a
+    /// reboot, a crash — that silently invalidates every token in the wild and
+    /// every signed-in student is bounced to the login screen for no visible reason.
+    /// </summary>
+    public static IServiceCollection AddAmicusDataProtection(
+        this IServiceCollection services, IConfiguration configuration)
+    {
+        var keyPath = configuration["DataProtection:KeyPath"];
+
+        var protection = services.AddDataProtection()
+            // Pinned rather than derived from the content root: the default is the
+            // application's path, so moving or renaming the deploy directory would
+            // orphan the keys and have the same effect as losing them.
+            .SetApplicationName("amicus-api");
+
+        if (!string.IsNullOrWhiteSpace(keyPath))
+        {
+            protection.PersistKeysToFileSystem(new DirectoryInfo(keyPath));
+        }
+
+        return services;
+    }
+
     public static IServiceCollection AddAmicusIdentity(this IServiceCollection services)
     {
         services.AddAuthorization();

@@ -360,6 +360,51 @@ public sealed class BookingFlowTests(AmicusFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_board_can_be_narrowed_to_a_date_range()
+    {
+        var admin = await _app.SignedInClientAsync("admin@amicus.test", AppRoles.Admin);
+        await SeedAsync(admin);
+
+        var student = await _app.SignedInClientAsync("student@amicus.test");
+
+        // The event is a single Tuesday, so a Monday-only window is empty and the
+        // Tuesday window is the whole board. Proves the filter bites either way.
+        var empty = await student.GetFromJsonAsync<List<BoardDto>>(
+            $"/events/{Slug}/board?from=2026-08-31&to=2026-08-31");
+        Assert.Empty(empty!);
+
+        var full = await student.GetFromJsonAsync<List<BoardDto>>(
+            $"/events/{Slug}/board?from=2026-09-01&to=2026-09-01");
+        Assert.Equal(4, Assert.Single(full!).Slots.Count);
+
+        var backwards = await student.GetAsync(
+            $"/events/{Slug}/board?from=2026-09-02&to=2026-09-01");
+        Assert.Equal(HttpStatusCode.BadRequest, backwards.StatusCode);
+    }
+
+    [Fact]
+    public async Task Location_headers_carry_the_forwarded_path_prefix()
+    {
+        // nginx serves this app under /amicus/ and strips the prefix, telling the
+        // app via X-Forwarded-Prefix. Results.Created with a literal path ignores
+        // PathBase, which shipped a Location pointing at a 404 one level up.
+        var admin = await _app.SignedInClientAsync("admin@amicus.test", AppRoles.Admin);
+        await SeedAsync(admin);
+
+        var student = await _app.SignedInClientAsync("student@amicus.test");
+        var slot = (await BoardAsync(student))[0].Id;
+
+        student.DefaultRequestHeaders.Add("X-Forwarded-Prefix", "/amicus");
+
+        // nginx strips the prefix, so the app sees /bookings and learns the prefix
+        // only from the header. That is the shape being reproduced here.
+        var created = await student.PostAsJsonAsync("/bookings", new { slotId = slot });
+
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.StartsWith("/amicus/bookings/", created.Headers.Location!.OriginalString);
+    }
+
+    [Fact]
     public async Task Students_cannot_reach_admin_endpoints()
     {
         var student = await _app.SignedInClientAsync("student@amicus.test");
