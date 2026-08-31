@@ -1,1 +1,1 @@
-# aamicusTimisoara
+# amicusTimisoara
