@@ -33,6 +33,12 @@ public sealed class AmicusAppFactory : WebApplicationFactory<Program>
         Environment.GetEnvironmentVariable("AMICUS_TEST_POSTGRES")
         ?? "Host=localhost;Port=5433;Database=postgres;Username=amicus;Password=amicus_dev";
 
+    /// <summary>
+    /// Extra settings for a one-off factory, e.g. a deliberately tiny rate limit.
+    /// Applied after the defaults, so it can override them.
+    /// </summary>
+    public Dictionary<string, string?> Overrides { get; } = [];
+
     private static string TestConnectionString =>
         new NpgsqlConnectionStringBuilder(AdminConnectionString)
         {
@@ -51,6 +57,18 @@ public sealed class AmicusAppFactory : WebApplicationFactory<Program>
         // builder.Configuration already includes.
         builder.UseSetting("ConnectionStrings:Postgres", TestConnectionString);
         builder.UseSetting("Authentication:Google:ClientIds:0", "test-client-id");
+
+        // Every in-process request comes from the same loopback address, so one
+        // shared partition holds the whole suite. Left at production limits, the
+        // register/login churn across tests would start returning 429 partway
+        // through and the failures would look like unrelated flakiness.
+        builder.UseSetting("RateLimits:GlobalPermitsPerMinute", "1000000");
+        builder.UseSetting("RateLimits:AuthPermitsPerMinute", "1000000");
+
+        foreach (var (key, value) in Overrides)
+        {
+            builder.UseSetting(key, value);
+        }
 
         builder.ConfigureServices(services =>
         {

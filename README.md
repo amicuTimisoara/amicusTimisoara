@@ -165,6 +165,78 @@ No default credentials ship anywhere. Register normally, add the address to
 left alone, and a slot no longer produced by any pattern is removed **only** if
 nobody ever booked it.
 
+## Running on the Raspberry Pi
+
+Deployed 2026-08-31. nginx terminates TLS and proxies a sub-path to a systemd
+service; Postgres is the same container as dev, with its own database and role.
+
+| | |
+|---|---|
+| Public URL | `https://thorsp.ddns.net/amicus/` |
+| Service | `amicus-api.service` (systemd), listening on `127.0.0.1:5090` |
+| Published app | `~/apps/amicus-api/` |
+| Settings + secrets | `~/.config/amicus/api.env`, mode 600 |
+| Database | `amicus_prod`, role `amicus_app`, same container as dev |
+| nginx | `location /amicus/` in `sites-available/verse-mate` |
+
+```bash
+dotnet publish src/Amicus.Api -c Release -o ~/apps/amicus-api
+set -a; . ~/.config/amicus/api.env; set +a          # note: the file is quoted, see below
+ASPNETCORE_ENVIRONMENT=Production dotnet dotnet-ef database update \
+  -p src/Amicus.Infrastructure -s src/Amicus.Api
+sudo systemctl restart amicus-api
+```
+
+Things that will bite whoever touches this next:
+
+- **The connection string in `api.env` is quoted, deliberately.** It contains
+  semicolons. systemd reads `KEY=VALUE` to end of line and does not care, but
+  `. api.env` in a shell takes `Host=localhost` as the value and each following
+  `Port=`/`Database=`/`Password=` as a *separate assignment* — leaving a truncated
+  string that silently falls back to port 5432.
+- **nginx strips `/amicus` and passes it as `X-Forwarded-Prefix`**, which the app
+  applies as `PathBase`. `Results.Created` with a literal path ignores PathBase, so
+  location headers go through `CreatedAt.Path`. The app does **not** strip a prefix
+  left on the path — `WebApplication` inserts `UseRouting` before user middleware,
+  so rewriting the path there is too late to affect routing.
+- **Data Protection keys persist to `~/.config/amicus/dp-keys`.** Without a
+  configured path they live in memory and every restart invalidates every issued
+  token, signing out every student for no visible reason. Verified: a token issued
+  before a restart still works after it.
+- **Migrations are not applied by the service.** A restart must never change the
+  schema.
+- **`docker compose` binds Postgres to `127.0.0.1` on purpose.** A bare
+  `"5433:5432"` binds `0.0.0.0`, and Docker's published ports **bypass UFW**
+  entirely on this host — the whole LAN could then reach the database with the
+  password committed in `docker-compose.yml`.
+- Registration is open to the internet. Per-IP rate limits
+  (`RateLimits:AuthPermitsPerMinute`, default 30/min) are the only guard; an
+  allowlist is still an open question.
+
+### Measured footprint
+
+Raspberry Pi 5, 4 cores. 384-slot board, 32 concurrent clients, 30 s, Release
+build:
+
+| | idle RSS | peak RSS | throughput | CPU |
+|---|---|---|---|---|
+| API, Server GC | 190 MB | 252 MB | 263 req/s | 1.68 cores |
+| **API, Workstation GC** | **176 MB** | **205 MB** | **255 req/s** | 1.62 cores |
+| API, 2016-slot board | 200 MB | 305 MB | 101 req/s | 1.68 cores |
+| Postgres container | 59 MB | — | — | ~0 idle |
+
+`ServerGarbageCollection` is therefore **off** (see the comment in
+`Amicus.Api.csproj`): Server GC allocates a heap per core and bought ~3% more
+throughput for ~47 MB. Flip it back on hardware where RAM is not the constraint.
+
+Idle service under systemd sits around **63 MB**; the ~190 MB above is after the
+GC has grown its heaps under load. Budget roughly **250 MB for the API plus 60 MB
+for Postgres** on this box.
+
+The 2016-slot row is why `GET /events/{slug}/board` takes optional `from`/`to`:
+a whole multi-week event is a genuinely large response, and clients showing one
+day should say so.
+
 ## Tests
 
 ```bash

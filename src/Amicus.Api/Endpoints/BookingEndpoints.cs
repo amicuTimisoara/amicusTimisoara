@@ -20,6 +20,7 @@ public static class BookingEndpoints
             AmicusDbContext db,
             ClaimsPrincipal user,
             TimeProvider clock,
+            HttpContext http,
             CancellationToken ct) =>
         {
             var userId = user.Id();
@@ -86,7 +87,7 @@ public static class BookingEndpoints
 
             var detail = await LoadDetailAsync(db, booking.Id, ct);
 
-            return Results.Created($"/bookings/{booking.Id}", detail);
+            return CreatedAt.Path(http, $"/bookings/{booking.Id}", detail);
         })
             .WithName("CreateBooking")
             .WithSummary("Take a free slot.");
