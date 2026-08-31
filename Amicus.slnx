@@ -5,6 +5,7 @@
     <Project Path="src/Amicus.Infrastructure/Amicus.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Amicus.Api.Tests/Amicus.Api.Tests.csproj" />
     <Project Path="tests/Amicus.Domain.Tests/Amicus.Domain.Tests.csproj" />
   </Folder>
 </Solution>
